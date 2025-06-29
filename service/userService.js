@@ -205,7 +205,7 @@ class Service {
             }
 
             if (!user.isVerified) {
-                throw new CustomError(404, 'Account is not verified, Please verify using email');
+                throw new CustomError(405, 'Account is not verified, Please verify using email');
             }
 
             const responseData = {
@@ -215,7 +215,7 @@ class Service {
                 // message:"Login successfull",
                 token: generateToken(user._id)
             };
-            return { data: responseData };
+            return responseData ;
         } else {
             throw new CustomError(400, 'Invalid email or password');
         }

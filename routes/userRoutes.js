@@ -7,7 +7,7 @@ const router = express.Router();
 router.post("/register", asyncErrorHandler(userController.registerUser))
 router.post("/login", asyncErrorHandler(userController.loginUser))
 router.post("/verify-otp", asyncErrorHandler(userController.verifyOTP))
-router.post("/resent-otp", asyncErrorHandler(userController.resendOTP))
+router.post("/resend-otp", asyncErrorHandler(userController.resendOTP))
 router.post("/forget-password", asyncErrorHandler(userController.forgetPassword))
 router.post("/reset-password", asyncErrorHandler(userController.resetPassword))
 
