@@ -2,15 +2,13 @@ const express = require('express');
 const { MCQController } = require('../controller/mcqController');
 const router = express.Router();
 const userRoutes = require('./userRoutes.js');
+const mcqRoutes = require('./mcqRoutes.js');
 
 router.use("/user",userRoutes);
 
 
-router.get("/mcq",MCQController.getMCQs);
-router.get("/mcq/:questionId",MCQController.getMCQById);
-router.delete("/mcq/:questionId",MCQController.deleteMCQById);
-router.post("/mcq",MCQController.postMCQ);
-router.put("/mcq",MCQController.updateMCQ);
+router.use("/mcq",mcqRoutes);
+
 
 
 // Default Route

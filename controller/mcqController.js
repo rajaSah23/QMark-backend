@@ -4,6 +4,8 @@ const { successResponse } = require("../utility/successResponse");
 
 const MCQController = {
     getMCQs: asyncErrorHandler(async (req, res) => {
+        console.log("getMCQs");
+        
         const response = await mcqService.getMCQs(req.query);
         res.status(200).json(successResponse(200, response, "Questions sent successfully"));
     }),
