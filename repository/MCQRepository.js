@@ -54,6 +54,10 @@ const MCQRepository = {
             totalPages: Math.ceil(total / limit)
         };
     },
+    aggregateMCQs: async (pipeline) => {
+        const results = await MCQ.aggregate(pipeline);
+        return results;
+    },
     getMCQById : async(questionId)=>{
         const  response =  await MCQ.findById(questionId);
         if(!response) throw new CustomError(404,"Question not found");

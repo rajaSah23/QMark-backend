@@ -2,6 +2,10 @@
 const Joi = require('joi');
 
 const createMCQSchema = Joi.object({
+  user: Joi.string().required().messages({
+    'any.required': 'User ID is required',
+    'string.empty': 'User ID cannot be empty'
+  }),
   question: Joi.string().required().messages({
     'any.required': 'Question is required',
     'string.empty': 'Question cannot be empty'
@@ -28,6 +32,7 @@ const createMCQSchema = Joi.object({
       'any.only': 'Difficulty must be easy, medium, or hard'
     }),
   subject: Joi.string().allow(''),
+  topic: Joi.string().allow(''),
   tag: Joi.array().items(Joi.string()),
   explanation: Joi.string().allow(''),
   status: Joi.boolean().default(true)

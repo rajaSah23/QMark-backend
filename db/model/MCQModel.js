@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const MCQSchema = new mongoose.Schema({
+  user:{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   question: {
     type: String,
     required: true
@@ -20,12 +25,12 @@ const MCQSchema = new mongoose.Schema({
     required: true
   },
   subject: {
-    type: String,
-    default:"other"
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subject',
   },
   topic: {
-    type: String,
-    default:"other"
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Topic',
   },
   tag: {
     type: [String]

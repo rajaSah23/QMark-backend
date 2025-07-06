@@ -5,9 +5,9 @@ const router = express.Router();
 
 
 router.get("/", userAuth, MCQController.getMCQs);
-router.get("/:questionId", MCQController.getMCQById);
-router.post("/", MCQController.postMCQ);
-router.put("/", MCQController.updateMCQ);
-router.delete("/:questionId", MCQController.deleteMCQById);
+router.get("/:questionId",userAuth, MCQController.getMCQById);
+router.post("/", userAuth,MCQController.postMCQ);
+router.put("/", userAuth, MCQController.updateMCQ);
+router.delete("/:questionId", userAuth, MCQController.deleteMCQById);
 
 module.exports = router;
