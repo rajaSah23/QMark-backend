@@ -14,11 +14,18 @@ class MasterRepository {
     async getSubjectList(userId){
         if (!userId) throw new Error("User ID is required");
 
-        const subjects = await Subject.find({ user: userId });
+        const subjects = await Subject.find({ user: userId ,active: true });
         
         if (!subjects || subjects.length === 0) throw new Error("No subjects found");
 
         return subjects;
+    }
+    async deleteSubjectById(subjectId){     
+        //make it active false
+        if (!subjectId) throw new Error("Subject ID is required");
+        const subject = await Subject.findByIdAndUpdate(subjectId, { active: false }, { new: true });
+
+        return subject;
     }
     async getTopicList(userId,subjectId){
         if (!userId) throw new Error("User ID is required");

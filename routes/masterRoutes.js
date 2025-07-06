@@ -6,6 +6,7 @@ const router = express.Router();
 
 
 router.get("/subjects", userAuth, asyncErrorHandler(masterController.getSubject));
+router.delete("/subject/:subjectId", userAuth, asyncErrorHandler(masterController.deleteSubject));
 router.get("/topics/:subjectId", userAuth, asyncErrorHandler(masterController.getTopics));
 // router.get("/:questionId",userAuth, MCQController.getMCQById);
 router.post("/subject-topics", userAuth,asyncErrorHandler(masterController.addSubjectAndTopics));

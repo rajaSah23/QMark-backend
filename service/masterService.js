@@ -38,6 +38,13 @@ class MasterService {
 
         return subjects;
     }
+    
+    deleteSubjectById = async(subjectId) =>{
+        if (!subjectId) throw new CustomError(400, "Subject Id is required");
+        const subject = await masterRepository.deleteSubjectById(subjectId);
+        if (!subject) throw new CustomError(404, "Subject not found");  
+        return subject;
+    }
     getTopicList = async(userId, subjectId) =>{
         if (!userId) throw new CustomError(400, "User ID is required");
 

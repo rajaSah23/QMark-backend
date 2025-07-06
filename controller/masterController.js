@@ -12,6 +12,11 @@ class MasterController {
 
         res.status(200).json(successResponse(200, response, "Subject list sent"))
     }
+    deleteSubject = async (req, res) => {
+        const response = await masterService.deleteSubjectById(req.params.subjectId);
+
+        res.status(200).json(successResponse(200, response, "Subject  deleted"))
+    }
     getTopics = async (req, res) => {
         const response = await masterService.getTopicList(req.user.id,req.params.subjectId);
 
