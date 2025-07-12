@@ -9,5 +9,6 @@ router.get("/:questionId",userAuth, MCQController.getMCQById);
 router.post("/", userAuth,MCQController.postMCQ);
 router.put("/", userAuth, MCQController.updateMCQ);
 router.delete("/:questionId", userAuth, MCQController.deleteMCQById);
+router.patch("/", userAuth, MCQController.bookmarkQuestion);
 
 module.exports = router;

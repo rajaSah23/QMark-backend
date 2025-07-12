@@ -32,6 +32,12 @@ const MCQController = {
         
         res.status(202).json(successResponse(202, response, "Question updated successfully"));
     }),
+
+    bookmarkQuestion: asyncErrorHandler(async (req, res) => {
+        const response = await mcqService.bookmarkQuestion(req.user.id, req.body);
+        
+        res.status(202).json(successResponse(202, response, "Question added to bookmarks"));
+    }),
 }
 
 

@@ -26,16 +26,20 @@ const MCQSchema = new mongoose.Schema({
   },
   subject: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Subject',
+    ref: 'subject',
   },
   topic: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Topic',
+    ref: 'topic',
   },
   tag: {
     type: [String]
   },
   explanation: String,
+  bookmark: {
+    type: Boolean,
+    default: false
+  },
   status: {
     type: Boolean,
     default : true

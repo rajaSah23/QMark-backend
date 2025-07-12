@@ -63,6 +63,9 @@ const MCQRepository = {
         if(!response) throw new CustomError(404,"Question not found");
         return response;
     },
+    getQuestion : async (condition)=>{
+        return await MCQ.findOne(condition);
+    },
     deleteMCQById : async(questionId)=>{
         
         const  response =  await MCQ.findByIdAndDelete(questionId);
@@ -72,15 +75,13 @@ const MCQRepository = {
     postMCQs : async(data)=>{
         const {error} = createMCQSchema.validate(data);
         if (error) throw new CustomError(400, error.details[0].message);
-
-        const newQuestion =  new MCQ(data);
-        const  response =  await newQuestion.save();
+        //create and populate subject and topic
+        const mcq = await MCQ.create(data);
+        const response = await MCQ.findById(mcq._id).populate("subject").populate("topic");
         return response;
     },
     updateMCQ : async(questionId,data)=>{
-        const {error} = updateMCQSchema.validate(data);
-        if (error) throw new CustomError(400, error.details[0].message);
-        const response = await MCQ.findByIdAndUpdate(questionId,data,{new:true});
+        const response = await MCQ.findByIdAndUpdate(questionId,data,{new:true}).populate("subject").populate("topic");
         // console.log(response);
         
         if(!response) throw new CustomError(404,"Question not found");

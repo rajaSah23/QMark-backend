@@ -16,6 +16,10 @@ const mcqService = {
                 { tag: searchRegex }
             ];
         }
+        //Match bookmark
+        if (query?.bookmark) {
+            matchStage.bookmark = query.bookmark === 'true';
+        }
 
         // Match subject by ObjectId
         if (query?.subject && query.subject !== 'all') {
@@ -171,6 +175,19 @@ const mcqService = {
 
 
         const response = await MCQRepository.updateMCQ(questionId, data);
+        return response;
+    },
+    bookmarkQuestion: async (userId, body) => {
+        if (!userId) throw new CustomError(400, "User ID is required");
+
+        const mcq = await MCQRepository.getQuestion({_id: body.questionId, user:userId});
+        if (!mcq) throw new CustomError(404, "Question not found");
+
+        const newData = {
+            bookmark:body.bookmark
+        }
+        
+        const response = await MCQRepository.updateMCQ(body.questionId, newData);
         return response;
     },
 }
