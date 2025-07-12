@@ -7,10 +7,10 @@ const router = express.Router();
 
 router.get("/subjects", userAuth, asyncErrorHandler(masterController.getSubject));
 router.delete("/subject/:subjectId", userAuth, asyncErrorHandler(masterController.deleteSubject));
+router.delete("/topic/:topicId", userAuth, asyncErrorHandler(masterController.deleteTopic));
+router.put("/subject/:subjectId", userAuth, asyncErrorHandler(masterController.updateSubject));
 router.get("/topics/:subjectId", userAuth, asyncErrorHandler(masterController.getTopics));
-// router.get("/:questionId",userAuth, MCQController.getMCQById);
-router.post("/subject-topics", userAuth,asyncErrorHandler(masterController.addSubjectAndTopics));
-// router.put("/", userAuth, MCQController.updateMCQ);
-// router.delete("/:questionId", userAuth, MCQController.deleteMCQById);
+router.put("/topic/:topicId", userAuth, asyncErrorHandler(masterController.updateTopic));
+router.post("/subject-topics", userAuth, asyncErrorHandler(masterController.addSubjectAndTopics));
 
 module.exports = router;

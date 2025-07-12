@@ -2,6 +2,9 @@ const Subject = require("../db/model/Subject");
 const Topic = require("../db/model/Topic");
 
 class MasterRepository {
+    async findSubject(condition){
+        return await Subject.findOne(condition);
+    }
     async createSubject (data){      
         const subject = await Subject.create(data);
         return subject;
@@ -20,6 +23,14 @@ class MasterRepository {
 
         return subjects;
     }
+    async updateSubjectById (subjectId,data){
+        const subject = await Subject.findByIdAndUpdate(subjectId, data, {new : true});
+        return subject;
+    }
+    async updateTopicById (topicId,data){
+        const topic  = await Topic.findByIdAndUpdate(topicId, data, {new : true});
+        return topic;
+    }
     async deleteSubjectById(subjectId){     
         //make it active false
         if (!subjectId) throw new Error("Subject ID is required");
@@ -30,7 +41,7 @@ class MasterRepository {
     async getTopicList(userId,subjectId){
         if (!userId) throw new Error("User ID is required");
 
-        const topics = await Topic.find({ user: userId, subject:subjectId  }).populate("subject","subject");
+        const topics = await Topic.find({ user: userId, subject:subjectId , active:true }).populate("subject","subject");
         
         if (!topics || topics.length === 0) throw new Error("No topics found");
 
