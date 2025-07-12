@@ -9,6 +9,12 @@ class MasterRepository {
         const subject = await Subject.create(data);
         return subject;
     }
+    async findTopic(condition){
+        return await Topic.findOne(condition);
+    }
+    async createTopic (data){
+        return await Topic.create(data);
+    }
     async createManyTopics (data){     
         const topics = await Topic.insertMany(data);
 

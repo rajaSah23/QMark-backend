@@ -12,5 +12,6 @@ router.put("/subject/:subjectId", userAuth, asyncErrorHandler(masterController.u
 router.get("/topics/:subjectId", userAuth, asyncErrorHandler(masterController.getTopics));
 router.put("/topic/:topicId", userAuth, asyncErrorHandler(masterController.updateTopic));
 router.post("/subject-topics", userAuth, asyncErrorHandler(masterController.addSubjectAndTopics));
+router.post("/topic", userAuth, asyncErrorHandler(masterController.addTopic));
 
 module.exports = router;

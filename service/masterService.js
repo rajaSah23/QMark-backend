@@ -6,8 +6,8 @@ class MasterService {
     createSubjectAndTopic = async (userId, data) => {
         const { subject, topics } = data;
 
-        const isSubExists = await masterRepository.findSubject({user: userId, subject: subject?.trim(),active:true});
-        if(isSubExists){
+        const isSubExists = await masterRepository.findSubject({ user: userId, subject: subject?.trim(), active: true });
+        if (isSubExists) {
             throw new CustomError(400, "Subject already exists");
         }
 
@@ -35,12 +35,34 @@ class MasterService {
             throw new CustomError(400, "Failed to create Subject");
         }
     }
-    updateSubjectById = async (userId,subjectId, data) => {
+    addTopic = async (userId, data) => {
+        if (!userId) throw new CustomError(400, "User ID is required");
+        const { subjectId, topic } = data;
+        if (!subjectId) throw new CustomError(400, "subjectId is required");
+        if (!topic) throw new CustomError(400, "Topic is required");
+
+        const topicPayload = {
+            user: userId,
+            subject: subjectId,
+            topic: topic.trim()
+        }
+
+        const isTopicExists = await masterRepository.findTopic({ user: userId, subject: subjectId,topic:topic, active: true });
+        if (isTopicExists) {
+            console.log(isTopicExists);
+            
+            throw new CustomError(400, "Topic already exists");
+        }
+
+        const topicRes = await masterRepository.createTopic(topicPayload);
+        return topicRes;
+    }
+    updateSubjectById = async (userId, subjectId, data) => {
         if (!subjectId) throw new CustomError(400, "Subject Id is required");
         if (!data || Object.keys(data).length === 0) throw new CustomError(400, "Data to update is required");
 
-        const isSubExists = await masterRepository.findSubject({user: userId, subject: data?.subject?.trim(), active:true});
-        if(isSubExists){
+        const isSubExists = await masterRepository.findSubject({ user: userId, subject: data?.subject?.trim(), active: true });
+        if (isSubExists) {
             throw new CustomError(400, "Subject already exists");
         }
 
@@ -97,7 +119,7 @@ class MasterService {
 
         return topics;
     }
-    updateTopicById = async (topicId, data) =>{
+    updateTopicById = async (topicId, data) => {
         if (!topicId) throw new CustomError(400, "Topic Id is required");
         if (!data || Object.keys(data).length === 0) throw new CustomError(400, "Data to update is required");
 
