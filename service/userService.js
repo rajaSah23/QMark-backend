@@ -141,7 +141,8 @@ class Service {
 
             const responseData = {
                 // message:"Link sent via e-mail",
-                token: token.token
+                token: token.token,
+                link : `${process.env.FRONTEND_URL}/reset-password/${token.token}` 
             }
             return responseData
         } else {
