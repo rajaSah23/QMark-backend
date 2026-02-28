@@ -1,6 +1,7 @@
 const { default: mongoose } = require("mongoose");
 const MCQRepository = require("../repository/MCQRepository");
 const CustomError = require("../utility/CustomError");
+const activityService = require("./activityService");
 
 const mcqService = {
     getMCQs: async (userId, query) => {
@@ -13,7 +14,8 @@ const mcqService = {
             const searchRegex = new RegExp(query.search, 'i');
             matchStage.$or = [
                 { question: searchRegex },
-                { tag: searchRegex }
+                { tag: searchRegex },
+                { options: searchRegex }
             ];
         }
         //Match bookmark
@@ -153,6 +155,10 @@ const mcqService = {
         console.log(data);
 
         const response = await MCQRepository.postMCQs(data);
+        
+        // Log activity
+        await activityService.logActivity(userId, 'QUESTION_ADDED', 1);
+        
         return response;
     },
     updateMCQ: async (userId, body) => {
@@ -170,23 +176,27 @@ const mcqService = {
         if (body.correctAnswer) data.correctAnswer = body.correctAnswer
         if (body.difficulty) data.difficulty = body.difficulty
         if (body.subject) data.subject = body.subject
+        if (body.topic) data.topic = body.topic
         if (body.explanation) data.explanation = body.explanation
-        if (body.status) data.status = body.status
-
+        if (body.status !== undefined) data.status = body.status
 
         const response = await MCQRepository.updateMCQ(questionId, data);
+        
+        // Log activity
+        await activityService.logActivity(userId, 'QUESTION_UPDATED', 1);
+        
         return response;
     },
     bookmarkQuestion: async (userId, body) => {
         if (!userId) throw new CustomError(400, "User ID is required");
 
-        const mcq = await MCQRepository.getQuestion({_id: body.questionId, user:userId});
+        const mcq = await MCQRepository.getQuestion({ _id: body.questionId, user: userId });
         if (!mcq) throw new CustomError(404, "Question not found");
 
         const newData = {
-            bookmark:body.bookmark
+            bookmark: body.bookmark
         }
-        
+
         const response = await MCQRepository.updateMCQ(body.questionId, newData);
         return response;
     },

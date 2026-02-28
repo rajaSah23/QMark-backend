@@ -5,6 +5,11 @@ class MasterController {
     addSubjectAndTopics = async (req, res) => {
         const response = await masterService.createSubjectAndTopic(req.user.id, req.body);
 
+        res.status(201).json(successResponse(201, response, "Subject and topics added"))
+    }
+    addSubject = async (req, res) => {
+        const response = await masterService.createSubject(req.user.id, req.body);
+
         res.status(201).json(successResponse(201, response, "Subject added"))
     }
     addTopic = async (req, res) => {

@@ -3,7 +3,7 @@ const { connectToDB } = require('./db');
 const globalMiddleware = require('./middleware/globalMiddleware');
 const app = express();
 require('dotenv').config();
-const PORT = process.env.PORT||3000;
+const PORT = process.env.PORT || 3000;
 const routes = require('./routes/index');
 cors = require('cors')
 
@@ -19,14 +19,14 @@ connectToDB();
 app.use(globalMiddleware);
 
 //Go to routes
-app.use("/api",routes);
+app.use("/api", routes);
 // Default Route
-app.get("/",(req,res)=>{
+app.get("/", (req, res) => {
     res.json({
-        test:"ok"
+        test: "ok"
     })
 });
 
-app.listen(3000,()=>{
-    console.log("Listening to the port :",PORT);
+app.listen(3000, () => {
+    console.log("Listening to the port :", PORT);
 })

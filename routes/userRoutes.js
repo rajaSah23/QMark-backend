@@ -12,6 +12,6 @@ router.post("/forgot-password", asyncErrorHandler(userController.forgetPassword)
 router.post("/reset-password", asyncErrorHandler(userController.resetPassword))
 
 router.get("/profile", userAuth, asyncErrorHandler(userController.getUser))
-router.get("/change-password", userAuth, asyncErrorHandler(userController.changePassword))
+router.put("/change-password", userAuth, asyncErrorHandler(userController.changePassword))
 
 module.exports = router;

@@ -35,6 +35,17 @@ class MasterService {
             throw new CustomError(400, "Failed to create Subject");
         }
     }
+    createSubject = async (userId, data) => {
+        const { subject } = data;
+        if (!subject) throw new CustomError(400, "Subject name is required");
+
+        const isSubExists = await masterRepository.findSubject({ user: userId, subject: subject?.trim(), active: true });
+        if (isSubExists) throw new CustomError(400, "Subject already exists");
+
+        const sub = await masterRepository.createSubject({ user: userId, subject: subject?.trim() });
+        if (!sub) throw new CustomError(400, "Failed to create Subject");
+        return sub;
+    }
     addTopic = async (userId, data) => {
         if (!userId) throw new CustomError(400, "User ID is required");
         const { subjectId, topic } = data;
@@ -47,10 +58,10 @@ class MasterService {
             topic: topic.trim()
         }
 
-        const isTopicExists = await masterRepository.findTopic({ user: userId, subject: subjectId,topic:topic, active: true });
+        const isTopicExists = await masterRepository.findTopic({ user: userId, subject: subjectId, topic: topic, active: true });
         if (isTopicExists) {
             console.log(isTopicExists);
-            
+
             throw new CustomError(400, "Topic already exists");
         }
 
@@ -79,8 +90,6 @@ class MasterService {
         if (!userId) throw new CustomError(400, "User ID is required");
 
         const subjects = await masterRepository.getSubjectList(userId);
-        if (!subjects || subjects.length === 0) throw new CustomError(404, "No subjects found");
-
         return subjects;
     }
 
@@ -115,8 +124,6 @@ class MasterService {
         if (!userId) throw new CustomError(400, "User ID is required");
 
         const topics = await masterRepository.getTopicList(userId, subjectId);
-        if (!topics || topics.length === 0) throw new CustomError(404, "No topics found");
-
         return topics;
     }
     updateTopicById = async (topicId, data) => {
