@@ -53,41 +53,56 @@ const performanceService = {
             };
         }
 
-        // Calculate current streak
+        // Helper: get date string YYYY-MM-DD (UTC-safe)
+        const dateStr = (d) => new Date(d).toISOString().split('T')[0];
+
+        // Build a Set of dates that have actual activity
+        const activeDates = new Set(
+            activities
+                .filter(a => (a.totalActivity || 0) > 0)
+                .map(a => dateStr(a.date))
+        );
+
+        // Calculate current streak: count consecutive days going back from today or yesterday
         let currentStreak = 0;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const todayStr = dateStr(new Date());
+        const yesterdayDate = new Date();
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterdayStr = dateStr(yesterdayDate);
 
-        for (let i = 0; i < activities.length; i++) {
-            const activityDate = new Date(activities[i].date);
-            activityDate.setHours(0, 0, 0, 0);
+        // Determine start point
+        let startStr = null;
+        if (activeDates.has(todayStr)) {
+            startStr = todayStr;
+        } else if (activeDates.has(yesterdayStr)) {
+            startStr = yesterdayStr;
+        }
 
-            const expectedDate = new Date(today);
-            expectedDate.setDate(expectedDate.getDate() - i);
-
-            if (
-                activities[i].totalActivity > 0 &&
-                activityDate.getTime() === expectedDate.getTime()
-            ) {
+        if (startStr) {
+            let d = new Date(startStr);
+            while (activeDates.has(dateStr(d))) {
                 currentStreak++;
-            } else if (i === 0 && activityDate.getTime() !== expectedDate.getTime()) {
-                // No activity today, but check from yesterday
-                break;
-            } else {
-                break;
+                d.setDate(d.getDate() - 1);
             }
         }
 
-        // Calculate longest streak
-        let longestStreak = 0;
-        let tempStreak = 0;
+        // Calculate longest streak: iterate through sorted active dates checking date continuity
+        const sortedDates = Array.from(activeDates)
+            .sort()
+            .map(s => new Date(s));
 
-        for (const activity of activities) {
-            if (activity.totalActivity > 0) {
+        let longestStreak = sortedDates.length > 0 ? 1 : 0;
+        let tempStreak = longestStreak;
+
+        for (let i = 1; i < sortedDates.length; i++) {
+            const diffDays = Math.round(
+                (sortedDates[i] - sortedDates[i - 1]) / (1000 * 60 * 60 * 24)
+            );
+            if (diffDays === 1) {
                 tempStreak++;
                 longestStreak = Math.max(longestStreak, tempStreak);
             } else {
-                tempStreak = 0;
+                tempStreak = 1;
             }
         }
 

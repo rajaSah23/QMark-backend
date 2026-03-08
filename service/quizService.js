@@ -30,7 +30,12 @@ const quizService = {
             if (difficulty) matchStage.difficulty = difficulty;
             if (tags && tags.length > 0) matchStage.tag = { $in: tags };
 
-            const questions = await MCQ.find(matchStage).limit(limit || 10).select("_id");
+            //select random questions based on the filters
+            const questions = await MCQ.aggregate([
+                { $match: matchStage },
+                { $sample: { size: limit || 10 } },
+                { $project: { _id: 1 } }
+            ]);
             questionIds = questions.map((q) => q._id);
         }
 
@@ -158,10 +163,10 @@ const quizService = {
         };
 
         const attempt = await quizRepository.createAttempt(attemptData);
-        
+
         // Log activity for quiz attempt
         await activityService.logActivity(userId, 'QUIZ_ATTEMPT', 1);
-        
+
         return {
             attemptId: attempt._id,
             score,
