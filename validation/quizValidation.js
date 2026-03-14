@@ -38,7 +38,10 @@ const submitAttemptSchema = Joi.object({
     answers: Joi.array().items(
         Joi.object({
             question: Joi.string().required(),
-            selectedAnswer: Joi.string().allow(null, '').default(null)
+            selectedAnswer: Joi.string().allow(null, '').default(null),
+            status: Joi.string().valid('not_answered', 'answered', 'marked_for_review').default('not_answered'),
+            markedForReview: Joi.boolean().default(false),
+            visited: Joi.boolean().default(false)
         })
     ).required().messages({
         'any.required': 'Answers array is required'

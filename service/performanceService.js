@@ -6,6 +6,8 @@ const Activity = require("../db/model/Activity");
 const User = require("../db/model/User");
 const CustomError = require("../utility/CustomError");
 
+const isEvaluatedAnswer = (answer) => !!answer?.selectedAnswer;
+
 const performanceService = {
     /**
      * Get daily activity stats for a user within a date range
@@ -136,7 +138,9 @@ const performanceService = {
             quizTitle: attempt.quiz?.title || 'Untitled Quiz',
             score: attempt.score,
             totalQuestions: attempt.totalQuestions,
-            percentage: Math.round((attempt.score / attempt.totalQuestions) * 100),
+            percentage: attempt.totalQuestions > 0
+                ? Math.round((attempt.score / attempt.totalQuestions) * 100)
+                : 0,
             timeTaken: attempt.timeTaken,
             date: attempt.createdAt.toISOString().split('T')[0]
         }));
@@ -159,7 +163,11 @@ const performanceService = {
         })
             .populate({
                 path: 'answers.question',
-                select: 'subject correctAnswer'
+                select: 'subject',
+                populate: {
+                    path: 'subject',
+                    select: 'subject'
+                }
             })
             .exec();
 
@@ -168,9 +176,9 @@ const performanceService = {
 
         for (const attempt of attempts) {
             for (const answer of attempt.answers) {
-                if (answer.question && answer.question.subject) {
+                if (answer.question && answer.question.subject && isEvaluatedAnswer(answer)) {
                     const subjectId = answer.question.subject._id.toString();
-                    const subjectName = answer.question.subject.name || 'Unknown';
+                    const subjectName = answer.question.subject.subject || 'Unknown';
 
                     if (!subjectMap[subjectId]) {
                         subjectMap[subjectId] = {
@@ -197,7 +205,7 @@ const performanceService = {
 
             const subjects = new Set();
             for (const answer of attempt.answers) {
-                if (answer.question && answer.question.subject) {
+                if (answer.question && answer.question.subject && isEvaluatedAnswer(answer)) {
                     subjects.add(answer.question.subject._id.toString());
                 }
             }
@@ -260,7 +268,7 @@ const performanceService = {
             const attemptScore = (attempt.score / attempt.totalQuestions) * 100;
 
             for (const answer of attempt.answers) {
-                if (answer.question) {
+                if (answer.question && isEvaluatedAnswer(answer)) {
                     const difficulty = answer.question.difficulty
                         ? answer.question.difficulty.charAt(0).toUpperCase() +
                         answer.question.difficulty.slice(1)
@@ -311,7 +319,7 @@ const performanceService = {
 
         // Calculate metrics
         const totalQuestionsSolved = attempts.reduce((sum, attempt) => {
-            return sum + attempt.answers.length;
+            return sum + attempt.answers.filter(isEvaluatedAnswer).length;
         }, 0);
 
         const correctAnswers = attempts.reduce((sum, attempt) => {

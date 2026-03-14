@@ -5,6 +5,23 @@ const CustomError = require("../utility/CustomError");
 const { createQuizSchema, updateQuizSchema, submitAttemptSchema } = require("../validation/quizValidation");
 const activityService = require("./activityService");
 
+const buildAttemptSummary = (answers = []) => {
+    return answers.reduce((acc, answer) => {
+        if (answer.status === "marked_for_review") {
+            acc.markedForReview += 1;
+        } else if (answer.status === "answered") {
+            acc.answered += 1;
+        } else {
+            acc.notAnswered += 1;
+        }
+        return acc;
+    }, {
+        answered: 0,
+        notAnswered: 0,
+        markedForReview: 0
+    });
+};
+
 const quizService = {
     /**
      * Create a custom quiz.
@@ -141,18 +158,43 @@ const quizService = {
             correctAnswerMap[q._id.toString()] = q.correctAnswer;
         });
 
+        const submittedAnswerMap = value.answers.reduce((acc, answer) => {
+            acc[answer.question] = answer;
+            return acc;
+        }, {});
+
         let score = 0;
-        const gradedAnswers = value.answers.map((ans) => {
-            const correctAnswer = correctAnswerMap[ans.question];
-            const isCorrect = !!correctAnswer && ans.selectedAnswer === correctAnswer;
+        const gradedAnswers = quiz.questions.map((questionDoc) => {
+            const questionId = questionDoc._id.toString();
+            const submitted = submittedAnswerMap[questionId] || {};
+            const selectedAnswer = submitted.selectedAnswer || null;
+            const markedForReview = !!submitted.markedForReview;
+            const visited = !!submitted.visited;
+            const correctAnswer = correctAnswerMap[questionId];
+
+            if (selectedAnswer && !questionDoc.options.includes(selectedAnswer)) {
+                throw new CustomError(400, "Invalid answer submitted for one or more questions");
+            }
+
+            const status = markedForReview
+                ? "marked_for_review"
+                : selectedAnswer
+                    ? "answered"
+                    : "not_answered";
+            const isCorrect = !!selectedAnswer && !!correctAnswer && selectedAnswer === correctAnswer;
             if (isCorrect) score++;
+
             return {
-                question: ans.question,
-                selectedAnswer: ans.selectedAnswer || null,
+                question: questionId,
+                selectedAnswer,
+                status,
+                markedForReview,
+                visited,
                 isCorrect
             };
         });
 
+        const answerSummary = buildAttemptSummary(gradedAnswers);
         const attemptData = {
             user: userId,
             quiz: quizId,
@@ -168,12 +210,18 @@ const quizService = {
         await activityService.logActivity(userId, 'QUIZ_ATTEMPT', 1);
 
         return {
+            _id: attempt._id,
             attemptId: attempt._id,
             score,
             totalQuestions: quiz.questions.length,
             percentage: quiz.questions.length > 0 ? Math.round((score / quiz.questions.length) * 100) : 0,
             timeTaken: value.timeTaken,
-            answers: gradedAnswers
+            answers: gradedAnswers,
+            quiz: {
+                _id: quiz._id,
+                title: quiz.title
+            },
+            answerSummary
         };
     },
 
@@ -187,7 +235,14 @@ const quizService = {
         if (!quiz) throw new CustomError(404, "Quiz not found");
         if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied");
 
-        return await quizRepository.getAttemptsByQuiz(userId, quizId);
+        const attempts = await quizRepository.getAttemptsByQuiz(userId, quizId);
+        return attempts.map((attempt) => ({
+            ...attempt.toObject(),
+            percentage: attempt.totalQuestions > 0
+                ? Math.round((attempt.score / attempt.totalQuestions) * 100)
+                : 0,
+            answerSummary: buildAttemptSummary(attempt.answers || [])
+        }));
     },
 
     /**
@@ -200,7 +255,14 @@ const quizService = {
         if (!attempt) throw new CustomError(404, "Attempt not found");
         if (attempt.user.toString() !== userId) throw new CustomError(403, "Access denied");
 
-        return attempt;
+        const attemptObj = attempt.toObject();
+        return {
+            ...attemptObj,
+            percentage: attempt.totalQuestions > 0
+                ? Math.round((attempt.score / attempt.totalQuestions) * 100)
+                : 0,
+            answerSummary: buildAttemptSummary(attempt.answers || [])
+        };
     }
 };
 

@@ -41,10 +41,16 @@ const quizRepository = {
     },
 
     getAttemptById: async (attemptId) => {
-        return await QuizAttempt.findById(attemptId).populate({
-            path: "answers.question",
-            select: "question options correctAnswer explanation difficulty"
-        });
+        return await QuizAttempt.findById(attemptId)
+            .populate("quiz", "title description settings")
+            .populate({
+                path: "answers.question",
+                select: "question options correctAnswer explanation difficulty subject topic",
+                populate: [
+                    { path: "subject", select: "subject" },
+                    { path: "topic", select: "topic" }
+                ]
+            });
     },
 };
 

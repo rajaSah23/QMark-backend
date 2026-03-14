@@ -11,6 +11,19 @@ const AnswerSchema = new mongoose.Schema(
             type: String,
             default: null // null means skipped
         },
+        status: {
+            type: String,
+            enum: ['not_answered', 'answered', 'marked_for_review'],
+            default: 'not_answered'
+        },
+        markedForReview: {
+            type: Boolean,
+            default: false
+        },
+        visited: {
+            type: Boolean,
+            default: false
+        },
         isCorrect: {
             type: Boolean,
             required: true
