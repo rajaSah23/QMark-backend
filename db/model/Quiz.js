@@ -16,6 +16,11 @@ const QuizSchema = new mongoose.Schema(
             type: String,
             default: ''
         },
+        subject: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'subject',
+            default: null
+        },
         questions: [
             {
                 type: mongoose.Schema.Types.ObjectId,
@@ -40,6 +45,10 @@ const QuizSchema = new mongoose.Schema(
         active: {
             type: Boolean,
             default: true
+        },
+        deleted: {
+            type: Boolean,
+            default: false
         }
     },
     { timestamps: true }

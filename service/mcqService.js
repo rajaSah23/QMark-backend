@@ -114,6 +114,52 @@ const buildCreatedAtFilter = (query = {}) => {
     return Object.keys(createdAt).length > 0 ? createdAt : null;
 };
 
+const buildQuestionSortStages = (query = {}) => {
+    const sortBy = ["random", "name", "date"].includes(query?.sortBy) ? query.sortBy : "date";
+    const sortDirection = query?.sortDirection === "asc" ? 1 : -1;
+
+    if (sortBy === "name") {
+        return {
+            stages: [{ $sort: { question: sortDirection, _id: 1 } }],
+            meta: { sortBy, sortDirection: sortDirection === 1 ? "asc" : "desc", randomSeed: null }
+        };
+    }
+
+    if (sortBy === "date") {
+        return {
+            stages: [{ $sort: { createdAt: sortDirection, _id: 1 } }],
+            meta: { sortBy, sortDirection: sortDirection === 1 ? "asc" : "desc", randomSeed: null }
+        };
+    }
+
+    const parsedSeed = parseInt(query?.randomSeed, 10);
+    const randomSeed = Number.isFinite(parsedSeed) ? parsedSeed : Date.now();
+    const randomMultiplier = (Math.abs(randomSeed) % 997) + 37;
+    const randomOffset = (Math.abs(randomSeed) % 1543) + 101;
+
+    return {
+        stages: [
+            {
+                $addFields: {
+                    randomOrderKey: {
+                        $mod: [
+                            {
+                                $add: [
+                                    { $multiply: [{ $toLong: "$createdAt" }, randomMultiplier] },
+                                    randomOffset
+                                ]
+                            },
+                            2147483647
+                        ]
+                    }
+                }
+            },
+            { $sort: { randomOrderKey: 1, _id: 1 } }
+        ],
+        meta: { sortBy, sortDirection: "asc", randomSeed }
+    };
+};
+
 const mcqService = {
     getMCQs: async (userId, query) => {
         const matchStage = buildQuestionMatchStage(userId, query);
@@ -130,12 +176,12 @@ const mcqService = {
         const page = parseInt(query?.page) || 1;
         const limit = parseInt(query?.limit) || 10;
         const skip = (page - 1) * limit;
-        const sortOrder = query?.sort === "ASC" ? 1 : -1;
+        const { stages: sortStages, meta: sortMeta } = buildQuestionSortStages(query);
 
         // Results query
         const aggPipeline = [
             { $match: matchStage },
-            { $sort: { createdAt: sortOrder } },
+            ...sortStages,
             { $skip: skip },
             { $limit: limit },
             // Optional: populate subject and topic data
@@ -190,6 +236,9 @@ const mcqService = {
             total,
             page,
             totalPages: Math.ceil(total / limit),
+            sortBy: sortMeta.sortBy,
+            sortDirection: sortMeta.sortDirection,
+            randomSeed: sortMeta.randomSeed,
         };
     },
 

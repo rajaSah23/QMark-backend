@@ -9,7 +9,7 @@ const QuizController = {
     }),
 
     getQuizzes: asyncErrorHandler(async (req, res) => {
-        const response = await quizService.getQuizzes(req.user.id);
+        const response = await quizService.getQuizzes(req.user.id, req.query);
         res.status(200).json(successResponse(200, response, "Quizzes fetched successfully"));
     }),
 

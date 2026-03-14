@@ -64,6 +64,7 @@ const quizService = {
             user: userId,
             title: value.title,
             description: value.description,
+            subject: value.subject || null,
             questions: questionIds,
             settings: value.settings
         };
@@ -75,9 +76,29 @@ const quizService = {
     /**
      * List all quizzes for the user.
      */
-    getQuizzes: async (userId) => {
+    getQuizzes: async (userId, query = {}) => {
         if (!userId) throw new CustomError(400, "User ID is required");
-        const quizzes = await quizRepository.getQuizzesByUser(userId);
+        const filter = {};
+
+        if (query?.subject && query.subject !== 'all') {
+            if (query.subject === 'unassigned') {
+                filter.subject = null;
+            } else {
+                try {
+                    filter.subject = new mongoose.Types.ObjectId(query.subject);
+                } catch (_) {
+                    throw new CustomError(400, "Invalid subject filter");
+                }
+            }
+        }
+
+        if (query?.active === 'true') {
+            filter.active = true;
+        } else if (query?.active === 'false') {
+            filter.active = false;
+        }
+
+        const quizzes = await quizRepository.getQuizzesByUser(userId, filter);
         return quizzes;
     },
 
@@ -91,7 +112,7 @@ const quizService = {
         const quiz = await quizRepository.getQuizById(quizId);
         if (!quiz) throw new CustomError(404, "Quiz not found");
         if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied");
-        if (!quiz.active) throw new CustomError(404, "Quiz not found or deleted");
+        if (quiz.deleted) throw new CustomError(404, "Quiz not found");
 
         // Strip correct answers unless review mode
         if (!showAnswers) {
@@ -116,11 +137,16 @@ const quizService = {
         const quiz = await quizRepository.getQuizById(quizId);
         if (!quiz) throw new CustomError(404, "Quiz not found");
         if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied");
+        if (quiz.deleted) throw new CustomError(404, "Quiz not found");
 
         const updateData = {};
         if (value.title) updateData.title = value.title;
         if (value.description !== undefined) updateData.description = value.description;
+        if (Object.prototype.hasOwnProperty.call(value, 'subject')) {
+            updateData.subject = value.subject || null;
+        }
         if (value.questionIds) updateData.questions = value.questionIds;
+        if (value.active !== undefined) updateData.active = value.active;
         if (value.settings) updateData.settings = { ...quiz.settings.toObject(), ...value.settings };
 
         const updated = await quizRepository.updateQuiz(quizId, updateData);
@@ -136,6 +162,7 @@ const quizService = {
         const quiz = await quizRepository.getQuizById(quizId);
         if (!quiz) throw new CustomError(404, "Quiz not found");
         if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied");
+        if (quiz.deleted) throw new CustomError(404, "Quiz not found");
 
         return await quizRepository.deleteQuiz(quizId);
     },
@@ -150,6 +177,7 @@ const quizService = {
         const quiz = await quizRepository.getQuizById(quizId);
         if (!quiz) throw new CustomError(404, "Quiz not found");
         if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied");
+        if (quiz.deleted) throw new CustomError(404, "Quiz not found");
         if (!quiz.active) throw new CustomError(404, "Quiz not found or deleted");
 
         // Build a lookup of correct answers from the populated quiz
@@ -234,6 +262,7 @@ const quizService = {
         const quiz = await quizRepository.getQuizById(quizId);
         if (!quiz) throw new CustomError(404, "Quiz not found");
         if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied");
+        if (quiz.deleted) throw new CustomError(404, "Quiz not found");
 
         const attempts = await quizRepository.getAttemptsByQuiz(userId, quizId);
         return attempts.map((attempt) => ({
@@ -254,6 +283,7 @@ const quizService = {
         const attempt = await quizRepository.getAttemptById(attemptId);
         if (!attempt) throw new CustomError(404, "Attempt not found");
         if (attempt.user.toString() !== userId) throw new CustomError(403, "Access denied");
+        if (attempt.quiz?.deleted) throw new CustomError(404, "Quiz not found");
 
         const attemptObj = attempt.toObject();
         return {

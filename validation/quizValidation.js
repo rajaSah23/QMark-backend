@@ -6,6 +6,7 @@ const createQuizSchema = Joi.object({
         'string.empty': 'Quiz title cannot be empty'
     }),
     description: Joi.string().allow('').default(''),
+    subject: Joi.string().allow(null, '').default(null),
     // Provide specific question IDs or let filters pick them
     questionIds: Joi.array().items(Joi.string()).default([]),
     // Optional filters to auto-select questions
@@ -26,7 +27,9 @@ const createQuizSchema = Joi.object({
 const updateQuizSchema = Joi.object({
     title: Joi.string().trim(),
     description: Joi.string().allow(''),
+    subject: Joi.string().allow(null, ''),
     questionIds: Joi.array().items(Joi.string()),
+    active: Joi.boolean(),
     settings: Joi.object({
         shuffleQuestions: Joi.boolean(),
         shuffleOptions: Joi.boolean(),
