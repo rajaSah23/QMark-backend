@@ -20,7 +20,10 @@ const successResponse = (statusCode, data, message) => {
  * @param {Error} error
  */
 const errorResponse = (res, error) => {
-  console.error(error.message)
+  // Tests deliberately exercise 4xx paths; logging them would drown the output.
+  if (process.env.NODE_ENV !== "test") {
+    console.error(error.message)
+  }
   res.status(error.statusCode || 500).json({
     statusCode: error.statusCode || 500,
     message: error.message || "Something went wrong",

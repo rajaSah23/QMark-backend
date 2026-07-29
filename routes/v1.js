@@ -8,6 +8,7 @@ const mcqRoutes = require("../modules/mcq/index")
 const masterRoutes = require("../modules/master/index")
 const quizRoutes = require("../modules/quiz/index")
 const performanceRoutes = require("../modules/performance/index")
+const communityRoutes = require("../modules/community/index")
 
 // API health check
 router.get("/", (req, res) => {
@@ -20,5 +21,6 @@ router.use("/mcq", mcqRoutes)
 router.use("/master", masterRoutes)
 router.use("/quiz", quizRoutes)
 router.use("/performance", performanceRoutes)
+router.use("/community", communityRoutes)
 
 module.exports = router
