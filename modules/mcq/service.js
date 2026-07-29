@@ -3,6 +3,8 @@
 const mongoose = require("mongoose")
 const MCQ = require("./model")
 const QuestionOptionClick = require("./optionClickModel")
+const UserQuestionState = require("./userQuestionStateModel")
+const { canAccessQuestion, canModifyQuestion } = require("./access")
 const repository = require("./repository")
 const CustomError = require("../../utils/CustomError")
 const {
@@ -57,13 +59,64 @@ const getInteractionStatsByQuestion = async (userId, questionIds = []) => {
   }, {})
 }
 
+// ─── Internal Helper: Per-User Bookmark Stages ────────────────────────────────
+
+/**
+ * Aggregation stages that join the calling user's UserQuestionState and
+ * project a `bookmark` boolean onto each question, preserving the API shape
+ * that existed when `bookmark` was a field on the MCQ document.
+ *
+ * Applies the `?bookmark=` filter here too, since it is per-user state and
+ * therefore cannot be matched on the MCQ document itself.
+ */
+const buildBookmarkStages = (userId, query = {}) => {
+  const stages = [
+    {
+      $lookup: {
+        from: "userquestionstates",
+        let: { questionId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$question", "$$questionId"] },
+                  { $eq: ["$user", new mongoose.Types.ObjectId(userId)] }
+                ]
+              }
+            }
+          },
+          { $project: { bookmarked: 1 } }
+        ],
+        as: "userState"
+      }
+    },
+    {
+      $addFields: {
+        bookmark: {
+          $ifNull: [{ $arrayElemAt: ["$userState.bookmarked", 0] }, false]
+        }
+      }
+    },
+    { $project: { userState: 0 } }
+  ]
+
+  if (query?.bookmark !== undefined) {
+    stages.push({ $match: { bookmark: query.bookmark === "true" } })
+  }
+
+  return stages
+}
+
 // ─── Service Methods ──────────────────────────────────────────────────────────
 
 const getMCQs = async (userId, query) => {
   const matchStage = buildQuestionMatchStage(userId, query)
+  const bookmarkStages = buildBookmarkStages(userId, query)
 
   const countResult = await repository.aggregateMCQs([
     { $match: matchStage },
+    ...bookmarkStages,
     { $count: "total" }
   ])
   const total = countResult[0]?.total || 0
@@ -75,6 +128,7 @@ const getMCQs = async (userId, query) => {
 
   const aggPipeline = [
     { $match: matchStage },
+    ...bookmarkStages,
     ...sortStages,
     { $skip: skip },
     { $limit: limit },
@@ -132,17 +186,17 @@ const getMCQById = async (userId, params) => {
   if (!userId) throw new CustomError(400, "User ID is required")
 
   const mcq = await repository.getMCQById(params.questionId)
-  if (!mcq.user || mcq.user.toString() !== userId)
+  if (!canAccessQuestion(userId, mcq))
     throw new CustomError(403, "You are not authorized to access this question")
 
-  return await repository.getMCQById(params.questionId)
+  return mcq
 }
 
 const deleteMCQById = async (userId, params) => {
   if (!userId) throw new CustomError(400, "User ID is required")
 
   const mcq = await repository.getMCQById(params.questionId)
-  if (mcq.user.toString() !== userId)
+  if (!canModifyQuestion(userId, mcq))
     throw new CustomError(403, "You are not authorized to delete this question")
 
   return await repository.deleteMCQById(params.questionId)
@@ -178,7 +232,7 @@ const updateMCQ = async (userId, body) => {
   if (!userId) throw new CustomError(400, "User ID is required")
 
   const mcq = await repository.getMCQById(body.questionId)
-  if (mcq.user.toString() !== userId)
+  if (!canModifyQuestion(userId, mcq))
     throw new CustomError(403, "You are not authorized to update this question")
 
   const questionId = body.questionId
@@ -204,10 +258,17 @@ const updateMCQ = async (userId, body) => {
 const bookmarkQuestion = async (userId, body) => {
   if (!userId) throw new CustomError(400, "User ID is required")
 
-  const mcq = await repository.getQuestion({ _id: body.questionId, user: userId })
-  if (!mcq) throw new CustomError(404, "Question not found")
+  const mcq = await repository.getMCQById(body.questionId)
+  if (!canAccessQuestion(userId, mcq))
+    throw new CustomError(403, "You are not authorized to access this question")
 
-  return await repository.updateMCQ(body.questionId, { bookmark: body.bookmark })
+  const state = await UserQuestionState.findOneAndUpdate(
+    { user: userId, question: body.questionId },
+    { $set: { bookmarked: Boolean(body.bookmark) } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  )
+
+  return { questionId: body.questionId, bookmark: state.bookmarked }
 }
 
 const trackOptionClick = async (userId, questionId, body) => {
@@ -217,8 +278,10 @@ const trackOptionClick = async (userId, questionId, body) => {
   const { error, value } = trackQuestionInteractionSchema.validate(body)
   if (error) throw new CustomError(400, error.details[0].message)
 
-  const mcq = await repository.getQuestion({ _id: questionId, user: userId })
+  const mcq = await repository.getQuestion({ _id: questionId })
   if (!mcq) throw new CustomError(404, "Question not found")
+  if (!canAccessQuestion(userId, mcq))
+    throw new CustomError(403, "You are not authorized to access this question")
 
   if (!mcq.options.includes(value.selectedAnswer)) {
     throw new CustomError(400, "Selected answer is invalid for this question")
@@ -346,13 +409,15 @@ const getQuestionInteractionDetail = async (userId, questionId, query) => {
 
   const createdAtFilter = buildCreatedAtFilter(query)
 
-  const question = await MCQ.findOne({ _id: questionId, user: userId })
+  const question = await MCQ.findOne({ _id: questionId })
     .populate("subject", "subject")
     .populate("topic", "topic")
     .populate("comments.user", "name email")
     .lean()
 
   if (!question) throw new CustomError(404, "Question not found")
+  if (!canAccessQuestion(userId, question))
+    throw new CustomError(403, "You are not authorized to access this question")
 
   const clickQuery = {
     user: new mongoose.Types.ObjectId(userId),
@@ -410,8 +475,10 @@ const addQuestionComment = async (userId, questionId, body) => {
   const { error, value } = addQuestionCommentSchema.validate(body)
   if (error) throw new CustomError(400, error.details[0].message)
 
-  const question = await repository.getQuestion({ _id: questionId, user: userId })
+  const question = await repository.getQuestion({ _id: questionId })
   if (!question) throw new CustomError(404, "Question not found")
+  if (!canAccessQuestion(userId, question))
+    throw new CustomError(403, "You are not authorized to access this question")
 
   question.comments = question.comments || []
   question.comments.push({ user: userId, comment: value.comment })

@@ -20,9 +20,9 @@ const buildQuestionMatchStage = (userId, query = {}) => {
     ]
   }
 
-  if (query?.bookmark) {
-    matchStage.bookmark = query.bookmark === "true"
-  }
+  // NOTE: `bookmark` is deliberately not handled here. It is per-user state
+  // living in the UserQuestionState collection, so it is filtered after that
+  // join inside mcq/service.js `buildBookmarkStages`, not on the MCQ document.
 
   if (query?.subject && query.subject !== "all") {
     try {

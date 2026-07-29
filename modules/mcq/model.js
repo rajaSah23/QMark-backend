@@ -55,10 +55,6 @@ const MCQSchema = new mongoose.Schema(
       type: [String]
     },
     explanation: String,
-    bookmark: {
-      type: Boolean,
-      default: false
-    },
     status: {
       type: Boolean,
       default: true
