@@ -2,9 +2,11 @@
 
 const mongoose = require("mongoose")
 const MCQ = require("../mcq/model")
+const QuestionOptionClick = require("../mcq/optionClickModel")
 const CommunityQuestion = require("../community/questionModel")
 const { getMemberRole, canModerate } = require("../community/access")
 const { canAccessQuiz, canManageQuiz } = require("./access")
+const { selectAdaptiveQuestions } = require("./adaptiveSelector")
 const repository = require("./repository")
 const CustomError = require("../../utils/CustomError")
 const {
@@ -14,6 +16,42 @@ const {
 } = require("./joiSchema")
 
 // ─── Internal Helper ──────────────────────────────────────────────────────────
+
+/**
+ * This user's answer accuracy per subject, keyed by subject id (string).
+ * Subjects with zero clicks are simply absent from the result — the caller
+ * (adaptiveSelector) treats a missing key as "no history", not as 0%.
+ */
+const computeSubjectAccuracy = async (userId, subjectIds = []) => {
+  if (subjectIds.length === 0) return {}
+
+  const rows = await QuestionOptionClick.aggregate([
+    { $match: { user: new mongoose.Types.ObjectId(userId) } },
+    {
+      $lookup: {
+        from: "mcqs",
+        localField: "question",
+        foreignField: "_id",
+        as: "mcq"
+      }
+    },
+    { $unwind: "$mcq" },
+    { $match: { "mcq.subject": { $in: subjectIds } } },
+    {
+      $group: {
+        _id: "$mcq.subject",
+        total: { $sum: 1 },
+        correct: { $sum: { $cond: ["$isCorrect", 1, 0] } }
+      }
+    }
+  ])
+
+  const accuracyBySubject = {}
+  for (const row of rows) {
+    accuracyBySubject[row._id.toString()] = row.total > 0 ? row.correct / row.total : null
+  }
+  return accuracyBySubject
+}
 
 const buildAttemptSummary = (answers = []) => {
   return answers.reduce(
@@ -103,7 +141,7 @@ const createQuiz = async (userId, body) => {
     }
   } else if (questionIds.length === 0 && value.filters) {
     const matchStage = { user: new mongoose.Types.ObjectId(userId) }
-    const { subject, topic, difficulty, tags, limit } = value.filters
+    const { subject, topic, difficulty, tags, limit, adaptive } = value.filters
 
     if (subject) {
       try {
@@ -118,12 +156,33 @@ const createQuiz = async (userId, body) => {
     if (difficulty) matchStage.difficulty = difficulty
     if (tags && tags.length > 0) matchStage.tag = { $in: tags }
 
-    const questions = await MCQ.aggregate([
-      { $match: matchStage },
-      { $sample: { size: limit || 10 } },
-      { $project: { _id: 1 } }
-    ])
-    questionIds = questions.map((q) => q._id)
+    if (adaptive) {
+      // Adaptive mode needs the full matching pool to weigh from, not a
+      // pre-random sample of it. Capped at 500 as a pragmatic bound — the
+      // selector itself shuffles within whatever it's given.
+      const pool = await MCQ.aggregate([
+        { $match: matchStage },
+        { $limit: 500 },
+        { $project: { _id: 1, subject: 1, difficulty: 1 } }
+      ])
+
+      const subjectIds = [...new Set(pool.filter((q) => q.subject).map((q) => q.subject))]
+      const subjectAccuracy = await computeSubjectAccuracy(userId, subjectIds)
+
+      questionIds = selectAdaptiveQuestions({
+        pool,
+        subjectAccuracy,
+        limit: limit || 10,
+        forcedDifficulty: difficulty || null
+      })
+    } else {
+      const questions = await MCQ.aggregate([
+        { $match: matchStage },
+        { $sample: { size: limit || 10 } },
+        { $project: { _id: 1 } }
+      ])
+      questionIds = questions.map((q) => q._id)
+    }
   }
 
   if (questionIds.length === 0) {

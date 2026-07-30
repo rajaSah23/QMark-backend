@@ -16,7 +16,15 @@ const createQuizSchema = Joi.object({
     topic: Joi.string().allow(""),
     difficulty: Joi.string().valid("easy", "medium", "hard").allow(""),
     tags: Joi.array().items(Joi.string()).default([]),
-    limit: Joi.number().integer().min(1).max(100).default(10)
+    limit: Joi.number().integer().min(1).max(100).default(10),
+    /**
+     * Personal quizzes only (ignored for community quizzes — a shared quiz
+     * can't be biased toward one member's weak areas). When true, question
+     * selection is weighted toward subjects with lower accuracy and, within
+     * each subject, toward a difficulty mix shaped by accuracy there —
+     * instead of the plain random sample used when this is false/omitted.
+     */
+    adaptive: Joi.boolean().default(false)
   }).default({}),
   settings: Joi.object({
     shuffleQuestions: Joi.boolean().default(false),
