@@ -163,6 +163,34 @@ describe("member access to shared questions", () => {
     expect(ownerList.body.data.results[0].bookmark).toBe(false)
   })
 
+  it("keeps a member's bookmark on a shared question isolated from the author's own view", async () => {
+    const owner = await createUser()
+    const member = await createUser()
+    const community = await makeCommunity(owner.token)
+    await joinAs(community._id, member.token)
+
+    const question = await createQuestion(owner.user._id)
+    await request(app)
+      .post(`/api/v1/community/${community._id}/questions`)
+      .set(authHeader(owner.token))
+      .send({ questionId: question._id.toString() })
+
+    await request(app)
+      .patch("/api/v1/mcq")
+      .set(authHeader(member.token))
+      .send({ questionId: question._id.toString(), bookmark: true })
+
+    const memberView = await request(app)
+      .get(`/api/v1/mcq/${question._id}`)
+      .set(authHeader(member.token))
+    expect(memberView.body.data.bookmark).toBe(true)
+
+    const ownerView = await request(app)
+      .get(`/api/v1/mcq/${question._id}`)
+      .set(authHeader(owner.token))
+    expect(ownerView.body.data.bookmark).toBe(false)
+  })
+
   it("denies a non-member reading a shared question directly", async () => {
     const owner = await createUser()
     const outsider = await createUser()

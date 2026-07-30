@@ -189,7 +189,14 @@ const getMCQById = async (userId, params) => {
   if (!(await canAccessQuestion(userId, mcq)))
     throw new CustomError(403, "You are not authorized to access this question")
 
-  return mcq
+  const state = await UserQuestionState.findOne({
+    user: userId,
+    question: mcq._id
+  }).lean()
+
+  const result = mcq.toObject()
+  result.bookmark = Boolean(state?.bookmarked)
+  return result
 }
 
 const deleteMCQById = async (userId, params) => {
