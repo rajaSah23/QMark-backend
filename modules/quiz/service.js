@@ -53,6 +53,14 @@ const computeSubjectAccuracy = async (userId, subjectIds = []) => {
   return accuracyBySubject
 }
 
+/**
+ * A quiz is "exam-style" — one attempt, time cutoff enforced — either because
+ * it's a community quiz (always exam-style, per 4c) or because its creator
+ * explicitly set examMode on a personal quiz. Single source of truth for both
+ * rules so they can't drift out of sync.
+ */
+const isExamStyle = (quiz) => Boolean(quiz.community) || Boolean(quiz.examMode)
+
 const buildAttemptSummary = (answers = []) => {
   return answers.reduce(
     (acc, answer) => {
@@ -200,6 +208,9 @@ const createQuiz = async (userId, body) => {
     description: value.description,
     subject: value.subject || null,
     community: communityId,
+    // Community quizzes are exam-style via `community` alone; the flag is
+    // meaningless there, so it's only persisted for personal quizzes.
+    examMode: communityId ? false : Boolean(value.examMode),
     questions: questionIds,
     settings: value.settings
   }
@@ -253,16 +264,27 @@ const getQuizById = async (userId, quizId, showAnswers = false) => {
   if (!(await canAccessQuiz(userId, quiz)))
     throw new CustomError(403, "Access denied")
 
-  if (!showAnswers) {
-    const sanitized = quiz.toObject()
-    sanitized.questions = sanitized.questions.map((q) => {
-      const { correctAnswer, ...rest } = q
-      return rest
-    })
-    return sanitized
+  const result = showAnswers
+    ? quiz.toObject()
+    : (() => {
+        const sanitized = quiz.toObject()
+        sanitized.questions = sanitized.questions.map((q) => {
+          const { correctAnswer, ...rest } = q
+          return rest
+        })
+        return sanitized
+      })()
+
+  // Exam-style quizzes are one-attempt — tell the frontend whether this
+  // caller has already used theirs, so it can offer "View Result" instead
+  // of "Start Quiz" without a second round-trip.
+  if (isExamStyle(quiz)) {
+    const existingAttempt = await repository.getAttemptByUserAndQuiz(userId, quizId)
+    result.hasAttempted = Boolean(existingAttempt)
+    result.attemptId = existingAttempt?._id || null
   }
 
-  return quiz
+  return result
 }
 
 /**
@@ -286,6 +308,9 @@ const updateQuiz = async (userId, quizId, body) => {
   }
   if (value.questionIds) updateData.questions = value.questionIds
   if (value.active !== undefined) updateData.active = value.active
+  // Meaningless on a community quiz (already exam-style via `community`),
+  // but harmless to store — isExamStyle() ORs the two, so it's simply unread.
+  if (value.examMode !== undefined) updateData.examMode = value.examMode
   if (value.settings)
     updateData.settings = { ...quiz.settings.toObject(), ...value.settings }
 
@@ -321,12 +346,27 @@ const submitAttempt = async (userId, quizId, body) => {
     throw new CustomError(403, "Access denied")
   if (!quiz.active) throw new CustomError(404, "Quiz not found or deleted")
 
-  // Community quizzes are one-attempt, exam-style. Personal quizzes keep
-  // allowing unlimited practice attempts, unchanged.
-  if (quiz.community) {
+  // Exam-style quizzes (community, or personal with examMode on) are
+  // one-attempt with a server-enforced time cutoff. Plain personal quizzes
+  // keep allowing unlimited, untimed practice attempts, unchanged.
+  if (isExamStyle(quiz)) {
     const existingAttempt = await repository.getAttemptByUserAndQuiz(userId, quizId)
     if (existingAttempt)
       throw new CustomError(400, "You have already attempted this quiz")
+
+    const timeLimitMinutes = quiz.settings?.timeLimit || 0
+    if (timeLimitMinutes > 0) {
+      // Small grace window absorbs normal request latency between the
+      // client's timer hitting zero and this submission arriving.
+      const GRACE_SECONDS = 15
+      const limitSeconds = timeLimitMinutes * 60 + GRACE_SECONDS
+      if (value.timeTaken > limitSeconds) {
+        throw new CustomError(
+          400,
+          "This submission exceeds the quiz's time limit and cannot be accepted"
+        )
+      }
+    }
   }
 
   const correctAnswerMap = {}

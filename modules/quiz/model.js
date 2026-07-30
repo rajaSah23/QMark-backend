@@ -38,6 +38,17 @@ const QuizSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    /**
+     * Personal quizzes only (community quizzes are always exam-style
+     * regardless of this flag). When true: one attempt per user, and — if
+     * settings.timeLimit is set — the server rejects a submission reporting
+     * a timeTaken beyond that limit. False (default) keeps today's
+     * unlimited-attempts, unenforced-timing practice behaviour.
+     */
+    examMode: {
+      type: Boolean,
+      default: false
+    },
     questions: [
       {
         type: mongoose.Schema.Types.ObjectId,

@@ -10,6 +10,12 @@ const createQuizSchema = Joi.object({
   description: Joi.string().allow("").default(""),
   subject: Joi.string().allow(null, "").default(null),
   communityId: Joi.string().allow(null, "").default(null),
+  /**
+   * Personal quizzes only — a community quiz is always exam-style regardless
+   * of this flag (see modules/quiz/model.js). One attempt per user, plus a
+   * server-enforced time cutoff if settings.timeLimit is set.
+   */
+  examMode: Joi.boolean().default(false),
   questionIds: Joi.array().items(Joi.string()).default([]),
   filters: Joi.object({
     subject: Joi.string().allow(""),
@@ -39,6 +45,7 @@ const updateQuizSchema = Joi.object({
   subject: Joi.string().allow(null, ""),
   questionIds: Joi.array().items(Joi.string()),
   active: Joi.boolean(),
+  examMode: Joi.boolean(),
   settings: Joi.object({
     shuffleQuestions: Joi.boolean(),
     shuffleOptions: Joi.boolean(),
