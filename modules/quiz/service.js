@@ -2,6 +2,9 @@
 
 const mongoose = require("mongoose")
 const MCQ = require("../mcq/model")
+const CommunityQuestion = require("../community/questionModel")
+const { getMemberRole, canModerate } = require("../community/access")
+const { canAccessQuiz, canManageQuiz } = require("./access")
 const repository = require("./repository")
 const CustomError = require("../../utils/CustomError")
 const {
@@ -29,14 +32,76 @@ const buildAttemptSummary = (answers = []) => {
 /**
  * Create a custom quiz.
  * Supply questionIds directly, OR supply filters to auto-pick questions.
+ *
+ * If communityId is set, this becomes a community quiz: only a moderator or
+ * admin of that community may create it, and its question pool is restricted
+ * to questions APPROVED-shared in that community (never the creator's whole
+ * personal bank) — every member must actually be able to see every question
+ * on the quiz.
  */
 const createQuiz = async (userId, body) => {
   const { error, value } = createQuizSchema.validate(body)
   if (error) throw new CustomError(400, error.details[0].message)
 
+  const communityId = value.communityId || null
   let questionIds = value.questionIds || []
 
-  if (questionIds.length === 0 && value.filters) {
+  if (communityId) {
+    const role = await getMemberRole(userId, communityId)
+    if (!canModerate(role))
+      throw new CustomError(
+        403,
+        "Only moderators or admins can create a quiz in this community"
+      )
+
+    const approvedShares = await CommunityQuestion.find({
+      community: communityId,
+      status: "approved"
+    })
+      .select("question")
+      .lean()
+    const approvedQuestionIds = approvedShares.map((share) =>
+      share.question.toString()
+    )
+
+    if (questionIds.length > 0) {
+      const invalid = questionIds.filter(
+        (id) => !approvedQuestionIds.includes(id.toString())
+      )
+      if (invalid.length > 0)
+        throw new CustomError(
+          400,
+          "One or more questions are not shared and approved in this community"
+        )
+    } else if (value.filters && approvedQuestionIds.length > 0) {
+      const matchStage = {
+        _id: {
+          $in: approvedQuestionIds.map((id) => new mongoose.Types.ObjectId(id))
+        }
+      }
+      const { subject, topic, difficulty, tags, limit } = value.filters
+
+      if (subject) {
+        try {
+          matchStage.subject = new mongoose.Types.ObjectId(subject)
+        } catch (_) {}
+      }
+      if (topic) {
+        try {
+          matchStage.topic = new mongoose.Types.ObjectId(topic)
+        } catch (_) {}
+      }
+      if (difficulty) matchStage.difficulty = difficulty
+      if (tags && tags.length > 0) matchStage.tag = { $in: tags }
+
+      const questions = await MCQ.aggregate([
+        { $match: matchStage },
+        { $sample: { size: limit || 10 } },
+        { $project: { _id: 1 } }
+      ])
+      questionIds = questions.map((q) => q._id)
+    }
+  } else if (questionIds.length === 0 && value.filters) {
     const matchStage = { user: new mongoose.Types.ObjectId(userId) }
     const { subject, topic, difficulty, tags, limit } = value.filters
 
@@ -64,7 +129,9 @@ const createQuiz = async (userId, body) => {
   if (questionIds.length === 0) {
     throw new CustomError(
       400,
-      "No questions found for the given filters. Please add questions to your library first."
+      communityId
+        ? "No shared, approved questions found in this community for the given filters."
+        : "No questions found for the given filters. Please add questions to your library first."
     )
   }
 
@@ -73,6 +140,7 @@ const createQuiz = async (userId, body) => {
     title: value.title,
     description: value.description,
     subject: value.subject || null,
+    community: communityId,
     questions: questionIds,
     settings: value.settings
   }
@@ -81,12 +149,21 @@ const createQuiz = async (userId, body) => {
 }
 
 /**
- * List all quizzes for the user.
+ * List quizzes. With communityId, lists that community's quizzes (member-gated)
+ * instead of the caller's personal ones.
  */
 const getQuizzes = async (userId, query = {}) => {
   if (!userId) throw new CustomError(400, "User ID is required")
 
   const filter = {}
+  if (query?.active === "true") filter.active = true
+  else if (query?.active === "false") filter.active = false
+
+  if (query?.communityId) {
+    const role = await getMemberRole(userId, query.communityId)
+    if (!role) throw new CustomError(403, "Join this community to view its quizzes")
+    return await repository.getQuizzesByCommunity(query.communityId, filter)
+  }
 
   if (query?.subject && query.subject !== "all") {
     if (query.subject === "unassigned") {
@@ -100,10 +177,9 @@ const getQuizzes = async (userId, query = {}) => {
     }
   }
 
-  if (query?.active === "true") filter.active = true
-  else if (query?.active === "false") filter.active = false
-
-  return await repository.getQuizzesByUser(userId, filter)
+  // Excludes this user's own community quizzes — those belong in that
+  // community's list (communityId above), not the personal one.
+  return await repository.getQuizzesByUser(userId, { ...filter, community: null })
 }
 
 /**
@@ -114,8 +190,9 @@ const getQuizById = async (userId, quizId, showAnswers = false) => {
 
   const quiz = await repository.getQuizById(quizId)
   if (!quiz) throw new CustomError(404, "Quiz not found")
-  if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied")
   if (quiz.deleted) throw new CustomError(404, "Quiz not found")
+  if (!(await canAccessQuiz(userId, quiz)))
+    throw new CustomError(403, "Access denied")
 
   if (!showAnswers) {
     const sanitized = quiz.toObject()
@@ -138,8 +215,9 @@ const updateQuiz = async (userId, quizId, body) => {
 
   const quiz = await repository.getQuizById(quizId)
   if (!quiz) throw new CustomError(404, "Quiz not found")
-  if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied")
   if (quiz.deleted) throw new CustomError(404, "Quiz not found")
+  if (!(await canManageQuiz(userId, quiz)))
+    throw new CustomError(403, "Access denied")
 
   const updateData = {}
   if (value.title) updateData.title = value.title
@@ -163,8 +241,9 @@ const deleteQuiz = async (userId, quizId) => {
 
   const quiz = await repository.getQuizById(quizId)
   if (!quiz) throw new CustomError(404, "Quiz not found")
-  if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied")
   if (quiz.deleted) throw new CustomError(404, "Quiz not found")
+  if (!(await canManageQuiz(userId, quiz)))
+    throw new CustomError(403, "Access denied")
 
   return await repository.deleteQuiz(quizId)
 }
@@ -178,9 +257,18 @@ const submitAttempt = async (userId, quizId, body) => {
 
   const quiz = await repository.getQuizById(quizId)
   if (!quiz) throw new CustomError(404, "Quiz not found")
-  if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied")
   if (quiz.deleted) throw new CustomError(404, "Quiz not found")
+  if (!(await canAccessQuiz(userId, quiz)))
+    throw new CustomError(403, "Access denied")
   if (!quiz.active) throw new CustomError(404, "Quiz not found or deleted")
+
+  // Community quizzes are one-attempt, exam-style. Personal quizzes keep
+  // allowing unlimited practice attempts, unchanged.
+  if (quiz.community) {
+    const existingAttempt = await repository.getAttemptByUserAndQuiz(userId, quizId)
+    if (existingAttempt)
+      throw new CustomError(400, "You have already attempted this quiz")
+  }
 
   const correctAnswerMap = {}
   quiz.questions.forEach((q) => {
@@ -267,9 +355,12 @@ const getAttempts = async (userId, quizId) => {
 
   const quiz = await repository.getQuizById(quizId)
   if (!quiz) throw new CustomError(404, "Quiz not found")
-  if (quiz.user.toString() !== userId) throw new CustomError(403, "Access denied")
   if (quiz.deleted) throw new CustomError(404, "Quiz not found")
+  if (!(await canAccessQuiz(userId, quiz)))
+    throw new CustomError(403, "Access denied")
 
+  // Always scoped to the caller's own attempts, community quiz or not — this
+  // is "my history", never a cross-user view (that's the leaderboard).
   const attempts = await repository.getAttemptsByQuiz(userId, quizId)
   return attempts.map((attempt) => ({
     ...attempt.toObject(),
@@ -279,6 +370,67 @@ const getAttempts = async (userId, quizId) => {
         : 0,
     answerSummary: buildAttemptSummary(attempt.answers || [])
   }))
+}
+
+/**
+ * Publishes a community quiz's leaderboard. One-way: once published, results
+ * stay visible (there is no unpublish — this mirrors the real "results day"
+ * this feature is modelled on).
+ */
+const publishResults = async (userId, quizId) => {
+  if (!quizId) throw new CustomError(400, "Quiz ID is required")
+
+  const quiz = await repository.getQuizById(quizId)
+  if (!quiz) throw new CustomError(404, "Quiz not found")
+  if (quiz.deleted) throw new CustomError(404, "Quiz not found")
+  if (!quiz.community)
+    throw new CustomError(400, "Only community quizzes have publishable results")
+  if (!(await canManageQuiz(userId, quiz)))
+    throw new CustomError(403, "Access denied")
+  if (quiz.resultsPublished)
+    throw new CustomError(400, "Results are already published")
+
+  await repository.updateQuiz(quizId, { resultsPublished: true })
+  return { resultsPublished: true }
+}
+
+/**
+ * The ranked leaderboard for a community quiz. Hidden from plain members
+ * until a moderator/admin publishes it; moderators/admins can preview it
+ * early so they have something to decide "publish" against.
+ */
+const getLeaderboard = async (userId, quizId) => {
+  if (!quizId) throw new CustomError(400, "Quiz ID is required")
+
+  const quiz = await repository.getQuizById(quizId)
+  if (!quiz) throw new CustomError(404, "Quiz not found")
+  if (quiz.deleted) throw new CustomError(404, "Quiz not found")
+  if (!quiz.community)
+    throw new CustomError(400, "Only community quizzes have a leaderboard")
+  if (!(await canAccessQuiz(userId, quiz)))
+    throw new CustomError(403, "Access denied")
+
+  const isManager = await canManageQuiz(userId, quiz)
+  if (!quiz.resultsPublished && !isManager)
+    throw new CustomError(403, "Results have not been published yet")
+
+  const attempts = await repository.getAllAttemptsForQuiz(quizId)
+
+  return {
+    resultsPublished: quiz.resultsPublished,
+    entries: attempts.map((attempt, index) => ({
+      rank: index + 1,
+      user: { _id: attempt.user?._id, name: attempt.user?.name },
+      score: attempt.score,
+      totalQuestions: attempt.totalQuestions,
+      percentage:
+        attempt.totalQuestions > 0
+          ? Math.round((attempt.score / attempt.totalQuestions) * 100)
+          : 0,
+      timeTaken: attempt.timeTaken,
+      isYou: attempt.user?._id?.toString() === userId.toString()
+    }))
+  }
 }
 
 /**
@@ -312,5 +464,7 @@ module.exports = {
   deleteQuiz,
   submitAttempt,
   getAttempts,
-  getAttemptById
+  getAttemptById,
+  publishResults,
+  getLeaderboard
 }

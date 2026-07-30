@@ -21,4 +21,8 @@ router.post("/:quizId/attempt", asyncHandler(controller.submitAttempt))
 router.get("/:quizId/attempts", asyncHandler(controller.getAttempts))
 router.get("/:quizId/attempts/:attemptId", asyncHandler(controller.getAttemptById))
 
+// Community quizzes: publishing and the leaderboard it gates
+router.post("/:quizId/publish", asyncHandler(controller.publishResults))
+router.get("/:quizId/leaderboard", asyncHandler(controller.getLeaderboard))
+
 module.exports = router

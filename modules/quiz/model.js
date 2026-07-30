@@ -23,6 +23,21 @@ const QuizSchema = new mongoose.Schema(
       ref: "subject",
       default: null
     },
+    /** Set only for quizzes created inside a community; null for personal quizzes. */
+    community: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Community",
+      default: null
+    },
+    /**
+     * Community quizzes only. Individual attempts are always visible to their
+     * own author; this gates the LEADERBOARD (everyone's rank) until an admin
+     * or moderator publishes it.
+     */
+    resultsPublished: {
+      type: Boolean,
+      default: false
+    },
     questions: [
       {
         type: mongoose.Schema.Types.ObjectId,

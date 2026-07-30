@@ -71,6 +71,20 @@ const getAttemptById = async (req, res, next) => {
     .json(successResponse(200, response, "Attempt fetched successfully"))
 }
 
+const publishResults = async (req, res, next) => {
+  const response = await service.publishResults(req.user.id, req.params.quizId)
+  res
+    .status(202)
+    .json(successResponse(202, response, "Results published successfully"))
+}
+
+const getLeaderboard = async (req, res, next) => {
+  const response = await service.getLeaderboard(req.user.id, req.params.quizId)
+  res
+    .status(200)
+    .json(successResponse(200, response, "Leaderboard fetched successfully"))
+}
+
 module.exports = {
   createQuiz,
   getQuizzes,
@@ -79,5 +93,7 @@ module.exports = {
   deleteQuiz,
   submitAttempt,
   getAttempts,
-  getAttemptById
+  getAttemptById,
+  publishResults,
+  getLeaderboard
 }

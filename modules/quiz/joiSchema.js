@@ -9,6 +9,7 @@ const createQuizSchema = Joi.object({
   }),
   description: Joi.string().allow("").default(""),
   subject: Joi.string().allow(null, "").default(null),
+  communityId: Joi.string().allow(null, "").default(null),
   questionIds: Joi.array().items(Joi.string()).default([]),
   filters: Joi.object({
     subject: Joi.string().allow(""),

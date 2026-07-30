@@ -26,6 +26,12 @@ const getQuizzesByUser = (userId, filter = {}) =>
     .populate("subject", "subject")
     .sort({ createdAt: -1 })
 
+const getQuizzesByCommunity = (communityId, filter = {}) =>
+  Quiz.find({ community: communityId, deleted: { $ne: true }, ...filter })
+    .populate("subject", "subject")
+    .populate("user", "name")
+    .sort({ createdAt: -1 })
+
 const updateQuiz = (quizId, data) =>
   Quiz.findByIdAndUpdate(quizId, data, { new: true }).populate(
     "subject",
@@ -41,6 +47,16 @@ const createAttempt = (data) => QuizAttempt.create(data)
 
 const getAttemptsByQuiz = (userId, quizId) =>
   QuizAttempt.find({ user: userId, quiz: quizId }).sort({ createdAt: -1 })
+
+/** One user may have at most one attempt on a community quiz — used to enforce it. */
+const getAttemptByUserAndQuiz = (userId, quizId) =>
+  QuizAttempt.findOne({ user: userId, quiz: quizId })
+
+/** Every attempt on a quiz, across all users — the leaderboard's raw material. */
+const getAllAttemptsForQuiz = (quizId) =>
+  QuizAttempt.find({ quiz: quizId })
+    .populate("user", "name")
+    .sort({ score: -1, timeTaken: 1, createdAt: 1 })
 
 const getAttemptById = (attemptId) =>
   QuizAttempt.findById(attemptId)
@@ -59,9 +75,12 @@ module.exports = {
   createQuiz,
   getQuizById,
   getQuizzesByUser,
+  getQuizzesByCommunity,
   updateQuiz,
   deleteQuiz,
   createAttempt,
   getAttemptsByQuiz,
+  getAttemptByUserAndQuiz,
+  getAllAttemptsForQuiz,
   getAttemptById
 }
