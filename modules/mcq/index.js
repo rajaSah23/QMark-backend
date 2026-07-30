@@ -10,6 +10,7 @@ const { userAuth } = require("../../middlewares/auth")
 router.use(userAuth)
 
 router.get("/", asyncHandler(controller.getMCQs))
+router.get("/review-queue", asyncHandler(controller.getReviewQueue))
 router.get("/analytics/summary", asyncHandler(controller.getQuestionInteractionSummary))
 router.get("/:questionId/interactions", asyncHandler(controller.getQuestionInteractionDetail))
 router.post("/:questionId/comments", asyncHandler(controller.addQuestionComment))

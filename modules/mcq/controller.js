@@ -58,6 +58,13 @@ const trackOptionClick = async (req, res, next) => {
     )
 }
 
+const getReviewQueue = async (req, res, next) => {
+  const response = await service.getReviewQueue(req.user.id, req.query)
+  res
+    .status(200)
+    .json(successResponse(200, response, "Review queue sent successfully"))
+}
+
 const getQuestionInteractionSummary = async (req, res, next) => {
   const response = await service.getQuestionInteractionSummary(
     req.user.id,
@@ -110,6 +117,7 @@ module.exports = {
   updateMCQ,
   bookmarkQuestion,
   trackOptionClick,
+  getReviewQueue,
   getQuestionInteractionSummary,
   getQuestionInteractionDetail,
   addQuestionComment

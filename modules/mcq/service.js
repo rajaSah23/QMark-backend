@@ -5,6 +5,7 @@ const MCQ = require("./model")
 const QuestionOptionClick = require("./optionClickModel")
 const UserQuestionState = require("./userQuestionStateModel")
 const { canAccessQuestion, canModifyQuestion } = require("./access")
+const { schedule } = require("./srs")
 const repository = require("./repository")
 const CustomError = require("../../utils/CustomError")
 const {
@@ -303,6 +304,29 @@ const trackOptionClick = async (userId, questionId, body) => {
     isCorrect
   })
 
+  // Every answer — anywhere: personal bank or a shared community question —
+  // feeds spaced-repetition scheduling for this user/question pair.
+  const now = new Date()
+  const priorState = await UserQuestionState.findOne({
+    user: userId,
+    question: questionId
+  }).lean()
+  const next = schedule(priorState, isCorrect, now)
+
+  await UserQuestionState.findOneAndUpdate(
+    { user: userId, question: questionId },
+    {
+      $set: {
+        easeFactor: next.easeFactor,
+        interval: next.interval,
+        repetitions: next.repetitions,
+        nextReviewAt: next.nextReviewAt,
+        lastReviewedAt: now
+      }
+    },
+    { upsert: true, setDefaultsOnInsert: true }
+  )
+
   const statsMap = await getInteractionStatsByQuestion(userId, [questionId])
 
   return {
@@ -316,6 +340,73 @@ const trackOptionClick = async (userId, questionId, body) => {
       accuracy: 0,
       lastClickedAt: null
     }
+  }
+}
+
+/**
+ * Questions due for spaced-repetition review right now (nextReviewAt <= now),
+ * soonest-overdue first. Re-checks access at read time — a question can lose
+ * its shared access after being scheduled (e.g. unshared from a community),
+ * and such questions must not surface here even if still "due" on paper.
+ */
+const getReviewQueue = async (userId, query = {}) => {
+  if (!userId) throw new CustomError(400, "User ID is required")
+
+  const now = new Date()
+  const page = parseInt(query?.page) || 1
+  const limit = Math.min(parseInt(query?.limit) || 20, 50)
+
+  const dueStates = await UserQuestionState.find({
+    user: userId,
+    nextReviewAt: { $lte: now }
+  })
+    .sort({ nextReviewAt: 1 })
+    .limit(500)
+    .populate({
+      path: "question",
+      populate: [
+        { path: "subject", select: "subject" },
+        { path: "topic", select: "topic" }
+      ]
+    })
+    .lean()
+
+  const accessible = []
+  for (const state of dueStates) {
+    if (!state.question) continue
+    if (await canAccessQuestion(userId, state.question)) {
+      accessible.push(state)
+    }
+  }
+
+  const total = accessible.length
+  const skip = (page - 1) * limit
+  const pageItems = accessible.slice(skip, skip + limit)
+
+  const results = pageItems.map((state) => {
+    const { question, ...srs } = state
+    return {
+      ...question,
+      bookmark: Boolean(state.bookmarked),
+      srs: {
+        easeFactor: srs.easeFactor,
+        interval: srs.interval,
+        repetitions: srs.repetitions,
+        nextReviewAt: srs.nextReviewAt,
+        lastReviewedAt: srs.lastReviewedAt,
+        overdueDays: Math.max(
+          0,
+          Math.floor((now - new Date(srs.nextReviewAt)) / (1000 * 60 * 60 * 24))
+        )
+      }
+    }
+  })
+
+  return {
+    results,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit)
   }
 }
 
@@ -506,6 +597,7 @@ module.exports = {
   updateMCQ,
   bookmarkQuestion,
   trackOptionClick,
+  getReviewQueue,
   getQuestionInteractionSummary,
   getQuestionInteractionDetail,
   addQuestionComment
