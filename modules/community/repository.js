@@ -4,6 +4,7 @@ const Community = require("./model")
 const CommunityMember = require("./memberModel")
 const CommunityMembershipRequest = require("./membershipRequestModel")
 const CommunityReaction = require("./reactionModel")
+const CommunityQuestion = require("./questionModel")
 const CustomError = require("../../utils/CustomError")
 
 // ─── Community ────────────────────────────────────────────────────────────────
@@ -128,6 +129,35 @@ const deleteReaction = (communityId, userId) =>
 const findReactionsForUser = (userId, communityIds) =>
   CommunityReaction.find({ user: userId, community: { $in: communityIds } }).lean()
 
+// ─── Shared questions ─────────────────────────────────────────────────────────
+
+const findShare = (communityId, questionId) =>
+  CommunityQuestion.findOne({ community: communityId, question: questionId })
+
+const createShare = (data) => CommunityQuestion.create(data)
+
+const deleteShare = (communityId, questionId) =>
+  CommunityQuestion.deleteOne({ community: communityId, question: questionId })
+
+const findShareById = async (shareId) => {
+  const share = await CommunityQuestion.findById(shareId)
+  if (!share) throw new CustomError(404, "Shared question not found")
+  return share
+}
+
+const aggregateCommunityQuestions = (pipeline) =>
+  CommunityQuestion.aggregate(pipeline)
+
+const countShares = (filter) => CommunityQuestion.countDocuments(filter)
+
+const listSharesForQuestion = (questionId) =>
+  CommunityQuestion.find({ question: questionId })
+    .populate("community", "name slug visibility")
+    .lean()
+
+const updateShare = (shareId, data) =>
+  CommunityQuestion.findByIdAndUpdate(shareId, data, { new: true })
+
 module.exports = {
   aggregateCommunities,
   createCommunity,
@@ -152,5 +182,13 @@ module.exports = {
   findReaction,
   upsertReaction,
   deleteReaction,
-  findReactionsForUser
+  findReactionsForUser,
+  findShare,
+  createShare,
+  deleteShare,
+  findShareById,
+  aggregateCommunityQuestions,
+  countShares,
+  listSharesForQuestion,
+  updateShare
 }

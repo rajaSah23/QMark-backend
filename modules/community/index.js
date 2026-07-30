@@ -12,6 +12,8 @@ router.use(userAuth)
 // Caller-scoped routes first — "me" and "requests" must not be read as a slug.
 router.get("/me/invitations", asyncHandler(controller.listMyInvitations))
 router.post("/requests/:requestId/respond", asyncHandler(controller.respondToRequest))
+router.post("/shares/:shareId/moderate", asyncHandler(controller.moderateQuestion))
+router.get("/questions/:questionId/shares", asyncHandler(controller.getQuestionShares))
 
 router.get("/", asyncHandler(controller.listCommunities))
 router.post("/", asyncHandler(controller.createCommunity))
@@ -31,6 +33,12 @@ router.post("/:communityId/leave", asyncHandler(controller.leaveCommunity))
 router.post("/:communityId/react", asyncHandler(controller.reactToCommunity))
 router.post("/:communityId/invites", asyncHandler(controller.inviteUser))
 router.get("/:communityId/requests", asyncHandler(controller.listPendingRequests))
+router.get("/:communityId/questions", asyncHandler(controller.listCommunityQuestions))
+router.post("/:communityId/questions", asyncHandler(controller.shareQuestion))
+router.delete(
+  "/:communityId/questions/:questionId",
+  asyncHandler(controller.unshareQuestion)
+)
 
 router.put("/:communityId", asyncHandler(controller.updateCommunity))
 router.delete("/:communityId", asyncHandler(controller.deleteCommunity))

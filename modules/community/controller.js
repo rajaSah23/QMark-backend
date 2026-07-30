@@ -135,6 +135,60 @@ const respondToRequest = async (req, res) => {
   res.status(202).json(successResponse(202, response, "Request resolved"))
 }
 
+const shareQuestion = async (req, res) => {
+  const response = await service.shareQuestion(
+    req.user.id,
+    req.params.communityId,
+    req.body.questionId
+  )
+  res.status(201).json(
+    successResponse(
+      201,
+      response,
+      response.status === "pending"
+        ? "Question sent for review"
+        : "Question shared successfully"
+    )
+  )
+}
+
+const unshareQuestion = async (req, res) => {
+  const response = await service.unshareQuestion(
+    req.user.id,
+    req.params.communityId,
+    req.params.questionId
+  )
+  res.status(202).json(successResponse(202, response, "Question removed"))
+}
+
+const listCommunityQuestions = async (req, res) => {
+  const response = await service.listCommunityQuestions(
+    req.user.id,
+    req.params.communityId,
+    req.query
+  )
+  res
+    .status(200)
+    .json(successResponse(200, response, "Questions sent successfully"))
+}
+
+const moderateQuestion = async (req, res) => {
+  const response = await service.moderateQuestion(
+    req.user.id,
+    req.params.shareId,
+    req.body
+  )
+  res.status(202).json(successResponse(202, response, "Question reviewed"))
+}
+
+const getQuestionShares = async (req, res) => {
+  const response = await service.getQuestionShares(
+    req.user.id,
+    req.params.questionId
+  )
+  res.status(200).json(successResponse(200, response, "Shares sent successfully"))
+}
+
 module.exports = {
   listCommunities,
   createCommunity,
@@ -150,5 +204,10 @@ module.exports = {
   inviteUser,
   listPendingRequests,
   listMyInvitations,
-  respondToRequest
+  respondToRequest,
+  shareQuestion,
+  unshareQuestion,
+  listCommunityQuestions,
+  moderateQuestion,
+  getQuestionShares
 }

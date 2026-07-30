@@ -186,7 +186,7 @@ const getMCQById = async (userId, params) => {
   if (!userId) throw new CustomError(400, "User ID is required")
 
   const mcq = await repository.getMCQById(params.questionId)
-  if (!canAccessQuestion(userId, mcq))
+  if (!(await canAccessQuestion(userId, mcq)))
     throw new CustomError(403, "You are not authorized to access this question")
 
   return mcq
@@ -259,7 +259,7 @@ const bookmarkQuestion = async (userId, body) => {
   if (!userId) throw new CustomError(400, "User ID is required")
 
   const mcq = await repository.getMCQById(body.questionId)
-  if (!canAccessQuestion(userId, mcq))
+  if (!(await canAccessQuestion(userId, mcq)))
     throw new CustomError(403, "You are not authorized to access this question")
 
   const state = await UserQuestionState.findOneAndUpdate(
@@ -280,7 +280,7 @@ const trackOptionClick = async (userId, questionId, body) => {
 
   const mcq = await repository.getQuestion({ _id: questionId })
   if (!mcq) throw new CustomError(404, "Question not found")
-  if (!canAccessQuestion(userId, mcq))
+  if (!(await canAccessQuestion(userId, mcq)))
     throw new CustomError(403, "You are not authorized to access this question")
 
   if (!mcq.options.includes(value.selectedAnswer)) {
@@ -416,7 +416,7 @@ const getQuestionInteractionDetail = async (userId, questionId, query) => {
     .lean()
 
   if (!question) throw new CustomError(404, "Question not found")
-  if (!canAccessQuestion(userId, question))
+  if (!(await canAccessQuestion(userId, question)))
     throw new CustomError(403, "You are not authorized to access this question")
 
   const clickQuery = {
@@ -477,7 +477,7 @@ const addQuestionComment = async (userId, questionId, body) => {
 
   const question = await repository.getQuestion({ _id: questionId })
   if (!question) throw new CustomError(404, "Question not found")
-  if (!canAccessQuestion(userId, question))
+  if (!(await canAccessQuestion(userId, question)))
     throw new CustomError(403, "You are not authorized to access this question")
 
   question.comments = question.comments || []

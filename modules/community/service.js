@@ -489,6 +489,220 @@ const respondToRequest = async (userId, requestId, body) => {
   return { status: "accepted" }
 }
 
+// ─── Shared questions ─────────────────────────────────────────────────────────
+
+/**
+ * Shares an existing question into a community. The question is neither copied
+ * nor moved — this records a visibility grant that can be undone.
+ *
+ * Only the question's author may share it, so a member cannot expose someone
+ * else's private question.
+ */
+const shareQuestion = async (userId, communityId, questionId) => {
+  const community = await repository.findCommunityById(communityId)
+  const role = await getMemberRole(userId, community._id)
+  if (!canViewContent(role))
+    throw new CustomError(403, "Join this community before sharing questions")
+
+  const MCQ = require("../mcq/model")
+  const question = await MCQ.findById(questionId)
+  if (!question) throw new CustomError(404, "Question not found")
+
+  if (question.user.toString() !== userId.toString())
+    throw new CustomError(403, "You can only share questions you created")
+
+  const existing = await repository.findShare(community._id, questionId)
+  if (existing)
+    throw new CustomError(400, "That question is already shared here")
+
+  // Moderators bypass the queue even when approval is on.
+  const status =
+    community.requiresApproval && !canModerate(role) ? "pending" : "approved"
+
+  const share = await repository.createShare({
+    community: community._id,
+    question: questionId,
+    sharedBy: userId,
+    status,
+    ...(status === "approved" ? { reviewedBy: userId, reviewedAt: new Date() } : {})
+  })
+
+  if (status === "approved") {
+    await repository.bumpCounters(community._id, { questionCount: 1 })
+  }
+
+  return { _id: share._id, status: share.status }
+}
+
+/** Removes a share. The author may always undo; moderators may also remove. */
+const unshareQuestion = async (userId, communityId, questionId) => {
+  const community = await repository.findCommunityById(communityId)
+  const role = await getMemberRole(userId, community._id)
+
+  const share = await repository.findShare(community._id, questionId)
+  if (!share) throw new CustomError(404, "That question is not shared here")
+
+  const isSharer = share.sharedBy.toString() === userId.toString()
+  if (!isSharer && !canModerate(role))
+    throw new CustomError(403, "You are not allowed to remove this question")
+
+  await repository.deleteShare(community._id, questionId)
+  if (share.status === "approved") {
+    await repository.bumpCounters(community._id, { questionCount: -1 })
+  }
+
+  return { unshared: true }
+}
+
+/** Approved questions in a community, with the caller's own bookmark state. */
+const listCommunityQuestions = async (userId, communityId, query = {}) => {
+  const community = await repository.findCommunityById(communityId)
+  const role = await getMemberRole(userId, community._id)
+  if (!canViewContent(role))
+    throw new CustomError(403, "Join this community to view its questions")
+
+  const status = query.status === "pending" ? "pending" : "approved"
+  if (status === "pending" && !canModerate(role))
+    throw new CustomError(403, "Only moderators can view pending questions")
+
+  const page = parseInt(query.page) || 1
+  const limit = Math.min(parseInt(query.limit) || 10, 50)
+  const skip = (page - 1) * limit
+
+  const match = {
+    community: new mongoose.Types.ObjectId(communityId),
+    status
+  }
+
+  const countResult = await repository.aggregateCommunityQuestions([
+    { $match: match },
+    { $count: "total" }
+  ])
+  const total = countResult[0]?.total || 0
+
+  const rows = await repository.aggregateCommunityQuestions([
+    { $match: match },
+    { $sort: { createdAt: -1, _id: 1 } },
+    { $skip: skip },
+    { $limit: limit },
+    {
+      $lookup: {
+        from: "mcqs",
+        localField: "question",
+        foreignField: "_id",
+        as: "question"
+      }
+    },
+    { $unwind: "$question" },
+    {
+      $lookup: {
+        from: "subjects",
+        localField: "question.subject",
+        foreignField: "_id",
+        as: "question.subject"
+      }
+    },
+    { $unwind: { path: "$question.subject", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "sharedBy",
+        foreignField: "_id",
+        as: "sharedBy"
+      }
+    },
+    { $unwind: { path: "$sharedBy", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "userquestionstates",
+        let: { questionId: "$question._id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$question", "$$questionId"] },
+                  { $eq: ["$user", new mongoose.Types.ObjectId(userId)] }
+                ]
+              }
+            }
+          },
+          { $project: { bookmarked: 1 } }
+        ],
+        as: "userState"
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        status: 1,
+        createdAt: 1,
+        sharedBy: { _id: "$sharedBy._id", name: "$sharedBy.name" },
+        question: {
+          _id: "$question._id",
+          question: "$question.question",
+          options: "$question.options",
+          correctAnswer: "$question.correctAnswer",
+          explanation: "$question.explanation",
+          difficulty: "$question.difficulty",
+          subject: "$question.subject",
+          user: "$question.user",
+          bookmark: {
+            $ifNull: [{ $arrayElemAt: ["$userState.bookmarked", 0] }, false]
+          }
+        }
+      }
+    }
+  ])
+
+  return {
+    results: rows,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+    viewerRole: role
+  }
+}
+
+/** Approve or reject a question sitting in the moderation queue. */
+const moderateQuestion = async (userId, shareId, body) => {
+  const { error, value } = respondSchema.validate(body)
+  if (error) throw new CustomError(400, error.details[0].message)
+
+  const share = await repository.findShareById(shareId)
+  const community = await repository.findCommunityById(share.community)
+  const role = await getMemberRole(userId, community._id)
+  if (!canModerate(role))
+    throw new CustomError(403, "You are not allowed to moderate questions")
+
+  if (share.status !== "pending")
+    throw new CustomError(400, "That question has already been reviewed")
+
+  const status = value.action === "accept" ? "approved" : "rejected"
+  await repository.updateShare(shareId, {
+    status,
+    reviewedBy: userId,
+    reviewedAt: new Date()
+  })
+
+  if (status === "approved") {
+    await repository.bumpCounters(community._id, { questionCount: 1 })
+  }
+
+  return { status }
+}
+
+/** Which of the caller's communities a given question is already shared into. */
+const getQuestionShares = async (userId, questionId) => {
+  const MCQ = require("../mcq/model")
+  const question = await MCQ.findById(questionId)
+  if (!question) throw new CustomError(404, "Question not found")
+  if (question.user.toString() !== userId.toString())
+    throw new CustomError(403, "You can only manage your own questions")
+
+  return await repository.listSharesForQuestion(questionId)
+}
+
 module.exports = {
   listCommunities,
   createCommunity,
@@ -504,5 +718,10 @@ module.exports = {
   inviteUser,
   listPendingRequests,
   listMyInvitations,
-  respondToRequest
+  respondToRequest,
+  shareQuestion,
+  unshareQuestion,
+  listCommunityQuestions,
+  moderateQuestion,
+  getQuestionShares
 }
